@@ -1,10 +1,4 @@
 TAU = Math.PI * 2
-class World
-  constructor: ->
-    @resources = []
-    @buildings = []
-    for i in [0..30]
-      @resources.push { kind:'c', x:Math.random()*200, y:Math.random()*200 }
 
 hexSide = 22
 hexSmallX = Math.cos(TAU/6) * hexSide
@@ -41,6 +35,45 @@ xyForGridPoint = (x, y) ->
   else
     return {x:0.5+r(baseX + hexSide/2), y:1.5+r(baseY)}
 
+
+dist2 = (x1, y1, x2, y2) ->
+  if !x2? and !y2?
+    {x:x2, y:y2} = y1
+    {x:x1, y:y1} = x1
+  dx = x2 - x1
+  dy = y2 - y1
+  dx*dx+dy*dy
+dist = (x1, y1, x2, y2) ->
+  unless x2? and y2?
+    {x:x2, y:y2} = y1
+    {x:x1, y:y1} = x1
+  dx = x2 - x1
+  dy = y2 - y1
+  Math.sqrt dx*dx+dy*dy
+normal = (x1, y1, x2, y2) ->
+  if !x2? and !y2?
+    {x:x2, y:y2} = y1
+    {x:x1, y:y1} = x1
+  d = dist x1, y1, x2, y2
+  { x: (x2-x1)/d, y: (y2-y1)/d }
+
+class World
+  constructor: ->
+    @resources = []
+    @buildings = []
+    @nanites = []
+    for i in [0..10]
+      @resources.push { kind:'c', x:Math.random()*200, y:Math.random()*200 }
+
+  addBuilding: (b) ->
+    @buildings.push b
+  addNanite: (n) ->
+    @nanites.push n
+
+  update: (dt) ->
+    b.update? dt for b in @buildings
+    n.update? dt for n in @nanites
+
 class Building
   constructor: ->
     @resources = {}
@@ -49,12 +82,55 @@ class Nanite
   constructor: ->
 
 class GatherStation extends Building
-  constructor: ->
+  constructor: (@x, @y) ->
     super
+    {x, y} = xyForGridPoint(@x, @y)
+    @bot = new GatherNanite this, x, y
+    game.world.addNanite @bot
 
 class GatherNanite extends Nanite
-  constructor: ->
+  constructor: (@station, @x, @y) ->
+    @speed = 1/60
+    @target = null
+    @state = 'seeking'
     super
+  update: (dt) ->
+    switch @state
+      when 'seeking'
+        if not @target or game.world.resources.indexOf @target < 0
+          @acquireTarget()
+        if not @target
+          @state = 'empty'
+          break
+        if dist(@, @target) < 5
+          i = game.world.resources.indexOf @target
+          game.world.resources.splice i, 1
+          @target = xyForGridPoint @station.x, @station.y
+          @state = 'returning'
+      when 'returning'
+        if dist(@, @target) < 5
+          @target = null
+          @state = 'seeking'
+      when 'empty'
+        @target = @acquireTarget()
+        if @target?
+          @state = 'seeking'
+        else
+          @target = xyForGridPoint @station.x, @station.y
+    return unless @target
+    n = normal @x, @y, @target.x, @target.y
+    if dist(@, @target) > @speed * dt
+      @x += n.x * @speed * dt
+      @y += n.y * @speed * dt
+  acquireTarget: ->
+    min_d = Infinity
+    closest_r = null
+    for r in game.world.resources
+      d = dist2 @x, @y, r.x, r.y
+      if d < min_d
+        min_d = d
+        closest_r = r
+    @target = closest_r
 
 class NaniteGame extends atom.Game
   constructor: ->
@@ -65,8 +141,9 @@ class NaniteGame extends atom.Game
   update: (dt) ->
     if atom.input.pressed 'click'
       {x, y} = nearestGridPointTo atom.input.mouse.x, atom.input.mouse.y
-      building = {x, y}
-      @world.buildings.push building
+      building = new GatherStation x, y
+      @world.addBuilding building
+    @world.update dt
 
   draw: ->
     ctx = atom.context
@@ -117,12 +194,13 @@ class NaniteGame extends atom.Game
     for b in @world.buildings
       ctx.beginPath()
       {x, y} = xyForGridPoint b.x, b.y
-      ctx.arc x, y, 15, 0, Math.PI*2, true
+      ctx.arc x, y, 15, 0, TAU, true
       ctx.stroke()
-    ctx.beginPath()
-    ctx.arc atom.input.mouse.x, atom.input.mouse.y, 15, 0, Math.PI*2, true
-    #ctx.stroke()
 
+    for n in @world.nanites
+      ctx.beginPath()
+      ctx.arc n.x, n.y, 3, 0, TAU, true
+      ctx.stroke()
 game = new NaniteGame
 
 window.onblur = -> game.stop()
