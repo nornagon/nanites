@@ -20,7 +20,7 @@ nearestGridPointTo = (x, y) ->
   y1 = Math.floor y / hexSmallY
   x -= x1 * hexWidth + hexSide/2 + hexSmallX
   y -= y1 * hexSmallY
-  upandright = (x1 % 2 + y1 % 2) % 2 == 1
+  upandright = (x1 ^ y1) % 2
   if upandright
     slope = -hexSmallY / (hexSide + hexSmallX)
     yAtX = slope * x + hexSmallY
@@ -35,17 +35,11 @@ nearestGridPointTo = (x, y) ->
 xyForGridPoint = (x, y) ->
   baseX = hexWidth * x + hexSide/2 + hexSmallX
   baseY = hexSmallY * (y + 1)
-  if x % 2 == 1
-    if y % 2 == 0
-      return {x:baseX + hexSide/2 + hexSmallX, y:baseY}
-    else
-      return {x:baseX + hexSide/2, y:baseY}
+  r = Math.round
+  if (x ^ y) % 2
+    return {x:0.5+r(baseX + hexSide/2 + hexSmallX), y:1.5+r(baseY)}
   else
-    if y % 2 == 0
-      return {x:baseX + hexSide/2, y:baseY}
-    else
-      return {x:baseX + hexSide/2 + hexSmallX, y:baseY}
-  return {x:baseX, y:baseY}
+    return {x:0.5+r(baseX + hexSide/2), y:1.5+r(baseY)}
 
 class Building
   constructor: ->
@@ -70,7 +64,8 @@ class NaniteGame extends atom.Game
 
   update: (dt) ->
     if atom.input.pressed 'click'
-      building = x:atom.input.mouse.x, y:atom.input.mouse.y
+      {x, y} = nearestGridPointTo atom.input.mouse.x, atom.input.mouse.y
+      building = {x, y}
       @world.buildings.push building
 
   draw: ->
@@ -105,10 +100,9 @@ class NaniteGame extends atom.Game
     {x,y} = nearestGridPointTo atom.input.mouse.x, atom.input.mouse.y
     {x,y} = xyForGridPoint x, y
     ctx.beginPath()
-    ctx.moveTo x, y
-    ctx.lineTo x+5,y+5
-    ctx.lineWidth = 5
-    ctx.strokeStyle = 'red'
+    ctx.arc x, y, 15, 0, TAU, true
+    ctx.strokeStyle = '#0f0'
+    ctx.lineWidth = 2
     ctx.stroke()
 
     ctx.strokeStyle = 'red'
@@ -122,7 +116,8 @@ class NaniteGame extends atom.Game
     ctx.lineWidth = 2
     for b in @world.buildings
       ctx.beginPath()
-      ctx.arc b.x, b.y, 15, 0, Math.PI*2, true
+      {x, y} = xyForGridPoint b.x, b.y
+      ctx.arc x, y, 15, 0, Math.PI*2, true
       ctx.stroke()
     ctx.beginPath()
     ctx.arc atom.input.mouse.x, atom.input.mouse.y, 15, 0, Math.PI*2, true
