@@ -78,12 +78,17 @@ class Building
   constructor: ->
     @resources = {}
 
+  addResource: (r) ->
+    @resources[r.kind] ?= 0
+    @resources[r.kind] += r.amount
+
 class Nanite
   constructor: ->
 
 class GatherStation extends Building
   constructor: (@x, @y) ->
     super
+    @node = if @x % 2 == 0 then { x:@x, y:@y+1 } else { x:@x+1, y:@y }
     {x, y} = xyForGridPoint(@x, @y)
     @bot = new GatherNanite this, x, y
     game.world.addNanite @bot
@@ -93,6 +98,7 @@ class GatherNanite extends Nanite
     @speed = 1/60
     @target = null
     @state = 'seeking'
+    @holding_resource = null
     super
   update: (dt) ->
     switch @state
@@ -104,12 +110,14 @@ class GatherNanite extends Nanite
           break
         if dist(@, @target) < 5
           i = game.world.resources.indexOf @target
+          @holding_resource = { kind:@target.kind, amount:1 }
           game.world.resources.splice i, 1
           @target = xyForGridPoint @station.x, @station.y
           @state = 'returning'
       when 'returning'
         if dist(@, @target) < 5
           @target = null
+          @station.addResource @holding_resource
           @state = 'seeking'
       when 'empty'
         @target = @acquireTarget()
@@ -195,6 +203,10 @@ class NaniteGame extends atom.Game
       ctx.beginPath()
       {x, y} = xyForGridPoint b.x, b.y
       ctx.arc x, y, 15, 0, TAU, true
+      ctx.stroke()
+      ctx.beginPath()
+      {x, y} = xyForGridPoint b.node.x, b.node.y
+      ctx.arc x, y, 3, 0, TAU, true
       ctx.stroke()
 
     for n in @world.nanites
