@@ -59,22 +59,47 @@ normal = (x1, y1, x2, y2) ->
 
 class World
   constructor: ->
-    @resources = []
-    @buildings = []
-    @nanites = []
+    @entities = []
     for i in [0..10]
-      @resources.push { kind:'c', x:Math.random()*200, y:Math.random()*200 }
+      @addEntity new Resource kind:'c', x:Math.random()*200, y:Math.random()*200
 
-  addBuilding: (b) ->
-    @buildings.push b
-  addNanite: (n) ->
-    @nanites.push n
+  all: (kind) ->
+    if typeof kind == 'function'
+      @entities.filter (e) -> e.constructor == kind
+    else if typeof kind == 'string'
+      @entities.filter (e) -> e.constructor.name == kind
+    else
+      throw 'need function or string'
+
+  addEntity: (e) ->
+    @entities.push e
+  removeEntity: (e) ->
+    i = @entities.indexOf e
+    throw 'entity not found' if i < 0
+    @entities.splice i, 1
 
   update: (dt) ->
-    b.update? dt for b in @buildings
-    n.update? dt for n in @nanites
+    e?.update? dt for e in @entities
 
-class Building
+  draw: ->
+    e.draw?() for e in @entities
+
+class Entity
+  constructor: ->
+
+class Resource extends Entity
+  constructor: (opts) ->
+    {@kind, @x, @y} = opts
+
+  draw: ->
+    ctx = atom.context
+    ctx.strokeStyle = 'red'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.arc @x, @y, 5, 0, Math.PI*2, true
+    ctx.stroke()
+
+class Building extends Entity
   constructor: ->
     @resources = {}
 
@@ -82,7 +107,7 @@ class Building
     @resources[r.kind] ?= 0
     @resources[r.kind] += r.amount
 
-class Nanite
+class Nanite extends Entity
   constructor: ->
 
 class GatherStation extends Building
@@ -91,7 +116,20 @@ class GatherStation extends Building
     @node = if @x % 2 == 0 then { x:@x, y:@y+1 } else { x:@x+1, y:@y }
     {x, y} = xyForGridPoint(@x, @y)
     @bot = new GatherNanite this, x, y
-    game.world.addNanite @bot
+    game.world.addEntity @bot
+
+  draw: ->
+    ctx = atom.context
+    ctx.strokeStyle = 'rgb(0,255,0)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    {x, y} = xyForGridPoint @x, @y
+    ctx.arc x, y, 15, 0, TAU, true
+    ctx.stroke()
+    ctx.beginPath()
+    {x, y} = xyForGridPoint @node.x, @node.y
+    ctx.arc x, y, 3, 0, TAU, true
+    ctx.stroke()
 
 class GatherNanite extends Nanite
   constructor: (@station, @x, @y) ->
@@ -103,15 +141,14 @@ class GatherNanite extends Nanite
   update: (dt) ->
     switch @state
       when 'seeking'
-        if not @target or game.world.resources.indexOf @target < 0
+        if not @target or game.world.all(Resource).indexOf @target < 0
           @acquireTarget()
         if not @target
           @state = 'empty'
           break
         if dist(@, @target) < 5
-          i = game.world.resources.indexOf @target
           @holding_resource = { kind:@target.kind, amount:1 }
-          game.world.resources.splice i, 1
+          game.world.removeEntity @target
           @target = xyForGridPoint @station.x, @station.y
           @state = 'returning'
       when 'returning'
@@ -133,12 +170,18 @@ class GatherNanite extends Nanite
   acquireTarget: ->
     min_d = Infinity
     closest_r = null
-    for r in game.world.resources
+    for r in game.world.all Resource
       d = dist2 @x, @y, r.x, r.y
       if d < min_d
         min_d = d
         closest_r = r
     @target = closest_r
+
+  draw: ->
+    ctx = atom.context
+    ctx.beginPath()
+    ctx.arc @x, @y, 3, 0, TAU, true
+    ctx.stroke()
 
 class NaniteGame extends atom.Game
   constructor: ->
@@ -150,7 +193,7 @@ class NaniteGame extends atom.Game
     if atom.input.pressed 'click'
       {x, y} = nearestGridPointTo atom.input.mouse.x, atom.input.mouse.y
       building = new GatherStation x, y
-      @world.addBuilding building
+      @world.addEntity building
     @world.update dt
 
   draw: ->
@@ -190,29 +233,8 @@ class NaniteGame extends atom.Game
     ctx.lineWidth = 2
     ctx.stroke()
 
-    ctx.strokeStyle = 'red'
-    ctx.lineWidth = 1
-    for r in @world.resources
-      ctx.beginPath()
-      ctx.arc r.x, r.y, 5, 0, Math.PI*2, true
-      ctx.stroke()
+    @world.draw()
 
-    ctx.strokeStyle = 'rgb(0,255,0)'
-    ctx.lineWidth = 2
-    for b in @world.buildings
-      ctx.beginPath()
-      {x, y} = xyForGridPoint b.x, b.y
-      ctx.arc x, y, 15, 0, TAU, true
-      ctx.stroke()
-      ctx.beginPath()
-      {x, y} = xyForGridPoint b.node.x, b.node.y
-      ctx.arc x, y, 3, 0, TAU, true
-      ctx.stroke()
-
-    for n in @world.nanites
-      ctx.beginPath()
-      ctx.arc n.x, n.y, 3, 0, TAU, true
-      ctx.stroke()
 game = new NaniteGame
 
 window.onblur = -> game.stop()
