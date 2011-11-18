@@ -113,7 +113,7 @@ class Nanite extends Entity
 class GatherStation extends Building
   constructor: (@x, @y) ->
     super
-    @node = if @x % 2 == 0 then { x:@x, y:@y+1 } else { x:@x+1, y:@y }
+    @node = if (@x % 2 ^ @y % 2) == 0 then { x:@x, y:@y+1 } else { x:@x+1, y:@y }
     {x, y} = xyForGridPoint(@x, @y)
     @bot = new GatherNanite this, x, y
     game.world.addEntity @bot
