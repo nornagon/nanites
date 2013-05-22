@@ -79,6 +79,7 @@ class World
     @entities.splice i, 1
 
   update: (dt) ->
+    # TODO: what happens when entities are removed during update?
     e?.update? dt for e in @entities
 
   draw: ->
@@ -110,10 +111,39 @@ class Building extends Entity
 class Nanite extends Entity
   constructor: ->
 
+class Node extends Entity
+  constructor: (@x, @y) ->
+  draw: ->
+    ctx = atom.context
+    ctx.strokeStyle = 'rgb(0,255,0)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    {x, y} = xyForGridPoint @x, @y
+    ctx.arc x, y, 3, 0, TAU, true
+    ctx.stroke()
+
+class Path extends Entity
+  constructor: ->
+    @points = []
+  draw: ->
+    ctx = atom.context
+    ctx.lineWidth = 2
+    ctx.strokeStyle = 'rgb(0,255,0)'
+    is_first = yes
+    for p in @points
+      {x, y} = xyForGridPoint p.x, p.y
+      if is_first
+        ctx.moveTo x, y
+        is_first = no
+      else
+        ctx.lineTo x, y
+
 class GatherStation extends Building
   constructor: (@x, @y) ->
     super
-    @node = if (@x % 2 ^ @y % 2) == 0 then { x:@x, y:@y+1 } else { x:@x+1, y:@y }
+    nodePos = if (@x % 2 ^ @y % 2) == 0 then { x:@x, y:@y+1 } else { x:@x+1, y:@y }
+    @node = new Node nodePos.x, nodePos.y
+    game.world.addEntity @node
     {x, y} = xyForGridPoint(@x, @y)
     @bot = new GatherNanite this, x, y
     game.world.addEntity @bot
@@ -125,10 +155,6 @@ class GatherStation extends Building
     ctx.beginPath()
     {x, y} = xyForGridPoint @x, @y
     ctx.arc x, y, 15, 0, TAU, true
-    ctx.stroke()
-    ctx.beginPath()
-    {x, y} = xyForGridPoint @node.x, @node.y
-    ctx.arc x, y, 3, 0, TAU, true
     ctx.stroke()
 
 class GatherNanite extends Nanite
@@ -179,28 +205,23 @@ class GatherNanite extends Nanite
 
   draw: ->
     ctx = atom.context
+    ctx.lineWidth = 2
+    ctx.strokeStyle = 'rgb(0,255,0)'
     ctx.beginPath()
     ctx.arc @x, @y, 3, 0, TAU, true
     ctx.stroke()
 
+
+
+
 class NaniteGame extends atom.Game
   constructor: ->
     super
-    atom.input.bind atom.button.LEFT, 'click'
+    @bind()
     @world = new World
 
-  update: (dt) ->
-    if atom.input.pressed 'click'
-      {x, y} = nearestGridPointTo atom.input.mouse.x, atom.input.mouse.y
-      building = new GatherStation x, y
-      @world.addEntity building
-    @world.update dt
-
-  draw: ->
+  drawGrid: ->
     ctx = atom.context
-    ctx.fillStyle = 'black'
-    ctx.fillRect 0, 0, atom.width, atom.height
-
     # \_/ \_/ \_/ \_/ \_/
     # / \_/ \_/ \_/ \_/ \_/
     # \_/ \_/ \_/ \_/ \_/
@@ -225,6 +246,16 @@ class NaniteGame extends atom.Game
     ctx.strokeStyle = 'rgb(0,110,0)'
     ctx.stroke()
 
+  clear: (color = 'black') ->
+    ctx = atom.context
+    ctx.fillStyle = color
+    ctx.fillRect 0, 0, atom.width, atom.height
+
+  draw: ->
+    ctx = atom.context
+    @clear()
+    @drawGrid()
+
     {x,y} = nearestGridPointTo atom.input.mouse.x, atom.input.mouse.y
     {x,y} = xyForGridPoint x, y
     ctx.beginPath()
@@ -234,6 +265,17 @@ class NaniteGame extends atom.Game
     ctx.stroke()
 
     @world.draw()
+
+  bind: ->
+    atom.input.bind atom.button.LEFT, 'click'
+    atom.input.bind atom.key.B, 'build'
+    atom.input.bind atom.key.N, 'path'
+  update: (dt) ->
+    if atom.input.pressed 'click'
+      {x, y} = nearestGridPointTo atom.input.mouse.x, atom.input.mouse.y
+      building = new GatherStation x, y
+      @world.addEntity building
+    @world.update dt
 
 game = new NaniteGame
 
